@@ -1,0 +1,16 @@
+{% extends "layout/content.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Statistiques" %}{{ block.super }}{% endblock %}
+
+{% block content %}
+
+    <h1>{% trans "Page en construction..." %}</h1>
+
+    <div class="card-deck mt-3">
+
+    	{{ stats }}
+
+    </div>
+
+{% endblock %}
