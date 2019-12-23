@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dateutil.relativedelta import relativedelta
 
 from django.shortcuts import render
@@ -121,29 +122,36 @@ def stats(request, template_name="stats/stats.html"):
 
     # --- Candidate stats.
 
-    data["total_job_applications"] = JobApplication.objects.count()
+    job_applications = JobApplication.objects
+    hirings = job_applications.filter(state=JobApplicationWorkflow.STATE_ACCEPTED)
 
-    data["total_hirings"] = JobApplication.objects.filter(
-        state=JobApplicationWorkflow.STATE_ACCEPTED
-    ).count()
+    data["total_job_applications"] = job_applications.count()
+
+    data["total_hirings"] = hirings.count()
 
     data["job_applications_per_creation_week"] = get_total_per_week(
-        JobApplication.objects, date_field="created_at", total_expression=Count("pk")
+        job_applications, date_field="created_at", total_expression=Count("pk")
     )
 
     data["hirings_per_creation_week"] = get_total_per_week(
-        JobApplication.objects.filter(state=JobApplicationWorkflow.STATE_ACCEPTED),
-        date_field="created_at",
-        total_expression=Count("pk"),
+        hirings, date_field="created_at", total_expression=Count("pk")
     )
 
     data["job_applications_per_sender_kind"] = get_pie_chart_data_per_sender_kind(
-        JobApplication.objects
+        job_applications
     )
 
-    data["hirings_per_sender_kind"] = get_pie_chart_data_per_sender_kind(
-        JobApplication.objects.filter(state=JobApplicationWorkflow.STATE_ACCEPTED)
-    )
+    data["hirings_per_sender_kind"] = get_pie_chart_data_per_sender_kind(hirings)
+
+    data["hirings_per_eligibility_author_kind"] = []
+    input = hirings.values("job_seeker__eligibility_diagnoses__author_kind")
+    # >>> input = [('11013331', 'KAT'), ('9085267', 'NOT'), ('5238761', 'ETH'), ('5349618', 'ETH'), ('11788544', 'NOT'), ('962142', 'ETH'), ('7795297', 'ETH'), ('7341464', 'ETH'), ('9843236', 'KAT'), ('5594916', 'ETH'), ('1550003', 'ETH')]
+    # >>> from collections import defaultdict
+    res = defaultdict(int)
+    for d in input:
+        author_kind = d['job_seeker__eligibility_diagnoses__author_kind']
+        res[author_kind] += 1
+    # import ipdb; ipdb.set_trace()
 
     # --- Prescriber stats.
 
@@ -158,9 +166,7 @@ def stats(request, template_name="stats/stats.html"):
     # Active prescriber means created at least one job
     # application in the given timeframe.
     data["active_prescriber_users_per_week"] = get_total_per_week(
-        JobApplication.objects.filter(
-            sender_kind=JobApplication.SENDER_KIND_PRESCRIBER
-        ),
+        job_applications.filter(sender_kind=JobApplication.SENDER_KIND_PRESCRIBER),
         date_field="created_at",
         total_expression=Count("sender_id", distinct=True),
     )
@@ -175,9 +181,10 @@ def get_pie_chart_data_per_sender_kind(queryset):
         .annotate(total=Count("pk", distinct=True))
         .order_by("sender_kind")
     )
-    total_per_sender_kind_as_dict = {
-        item["sender_kind"]: item["total"] for item in total_per_sender_kind_as_list
-    }
+    total_per_sender_kind_as_dict = defaultdict(
+        int,
+        {item["sender_kind"]: item["total"] for item in total_per_sender_kind_as_list},
+    )
     sender_kind_choices_as_dict = {
         item[0]: item[1] for item in JobApplication.SENDER_KIND_CHOICES
     }
